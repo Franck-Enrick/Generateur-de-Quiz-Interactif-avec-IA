@@ -4,7 +4,6 @@
 
 Un générateur de quiz interactif qui utilise l'IA pour créer 5 questions sur **n'importe quel thème**, en quelques secondes.
 
-![QuizAI Screenshot](screenshot.png)
 
 ##  Fonctionnalités
 
