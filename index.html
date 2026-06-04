@@ -1,0 +1,797 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>QuizAI — Générateur de Quiz Interactif</title>
+  <style>
+    /* ── Reset & Variables ─────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #0f0f1a;
+      --surface:   #1a1a2e;
+      --surface2:  #222240;
+      --accent:    #7c3aed;
+      --accent2:   #a855f7;
+      --success:   #22c55e;
+      --danger:    #ef4444;
+      --warning:   #f59e0b;
+      --text:      #f1f5f9;
+      --muted:     #94a3b8;
+      --border:    rgba(124,58,237,0.25);
+      --radius:    12px;
+      --shadow:    0 4px 32px rgba(0,0,0,0.4);
+    }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 24px 16px;
+    }
+
+    /* ── Header ────────────────────────────────────────────────── */
+    header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+    header h1 {
+      font-size: clamp(1.6rem, 4vw, 2.4rem);
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--accent2), #60a5fa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+    header p {
+      color: var(--muted);
+      margin-top: 6px;
+      font-size: 0.9rem;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(124,58,237,0.15);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 4px 12px;
+      font-size: 0.75rem;
+      color: var(--accent2);
+      margin-top: 10px;
+    }
+    .badge::before { content: '✦'; }
+
+    /* ── Card ──────────────────────────────────────────────────── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px;
+      width: 100%;
+      max-width: 640px;
+      box-shadow: var(--shadow);
+    }
+
+    /* ── Setup Screen ──────────────────────────────────────────── */
+    #setup { display: flex; flex-direction: column; gap: 20px; }
+
+    .field label {
+      display: block;
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 8px;
+    }
+    .field input, .field select {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      color: var(--text);
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .field input:focus, .field select:focus {
+      border-color: var(--accent2);
+    }
+    .field input::placeholder { color: var(--muted); }
+
+    .options-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .api-note {
+      background: rgba(245,158,11,0.08);
+      border: 1px solid rgba(245,158,11,0.25);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 0.8rem;
+      color: var(--warning);
+      display: flex;
+      gap: 8px;
+    }
+    .api-note span { flex-shrink: 0; }
+
+    /* ── Buttons ───────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 13px 24px;
+      border-radius: 8px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: white;
+      width: 100%;
+    }
+    .btn-primary:hover { opacity: 0.88; transform: translateY(-1px); }
+    .btn-primary:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
+    .btn-ghost {
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-size: 0.85rem;
+      padding: 8px 16px;
+    }
+    .btn-ghost:hover { border-color: var(--accent2); color: var(--text); }
+
+    /* ── Loading ───────────────────────────────────────────────── */
+    #loading { display: none; flex-direction: column; align-items: center; gap: 20px; text-align: center; }
+    .spinner {
+      width: 48px; height: 48px;
+      border: 3px solid var(--border);
+      border-top-color: var(--accent2);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-text { color: var(--muted); font-size: 0.9rem; }
+    .loading-label { font-weight: 700; font-size: 1.1rem; }
+
+    /* ── Quiz Screen ───────────────────────────────────────────── */
+    #quiz { display: none; flex-direction: column; gap: 20px; }
+
+    .quiz-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.82rem;
+      color: var(--muted);
+    }
+    .quiz-topic {
+      font-weight: 700;
+      color: var(--accent2);
+      font-size: 0.9rem;
+    }
+    .timer {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-weight: 700;
+      font-size: 1rem;
+      color: var(--text);
+      background: var(--surface2);
+      padding: 4px 12px;
+      border-radius: 999px;
+    }
+    .timer.urgent { color: var(--danger); animation: pulse 0.6s ease infinite alternate; }
+    @keyframes pulse { from { opacity: 1; } to { opacity: 0.5; } }
+
+    .progress-bar {
+      height: 4px;
+      background: var(--surface2);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--accent2));
+      border-radius: 999px;
+      transition: width 0.4s ease;
+    }
+
+    .question-num {
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--accent2);
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .question-text {
+      font-size: 1.15rem;
+      font-weight: 600;
+      line-height: 1.5;
+      color: var(--text);
+    }
+
+    .choices { display: flex; flex-direction: column; gap: 10px; }
+    .choice-btn {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 14px 18px;
+      color: var(--text);
+      font-size: 0.95rem;
+      cursor: pointer;
+      text-align: left;
+      transition: all 0.18s;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .choice-btn:hover:not(:disabled) {
+      border-color: var(--accent2);
+      background: rgba(124,58,237,0.12);
+      transform: translateX(3px);
+    }
+    .choice-btn:disabled { cursor: default; }
+    .choice-btn.correct {
+      border-color: var(--success);
+      background: rgba(34,197,94,0.12);
+      color: var(--success);
+    }
+    .choice-btn.wrong {
+      border-color: var(--danger);
+      background: rgba(239,68,68,0.1);
+      color: var(--danger);
+    }
+    .choice-letter {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.06);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 0.8rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .explanation {
+      display: none;
+      background: rgba(124,58,237,0.08);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 0.85rem;
+      color: var(--muted);
+      line-height: 1.55;
+    }
+    .explanation strong { color: var(--accent2); }
+
+    /* ── Results Screen ────────────────────────────────────────── */
+    #results { display: none; flex-direction: column; gap: 20px; text-align: center; }
+
+    .score-ring {
+      width: 120px; height: 120px;
+      border-radius: 50%;
+      margin: 0 auto;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      font-size: 2rem;
+      font-weight: 800;
+      border: 5px solid var(--accent);
+      background: rgba(124,58,237,0.1);
+      gap: 2px;
+    }
+    .score-ring small { font-size: 0.7rem; font-weight: 400; color: var(--muted); }
+
+    .result-title { font-size: 1.4rem; font-weight: 700; }
+    .result-subtitle { color: var(--muted); font-size: 0.9rem; }
+
+    .result-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+    }
+    .stat-box {
+      background: var(--surface2);
+      border-radius: 10px;
+      padding: 14px 10px;
+    }
+    .stat-box .val { font-size: 1.4rem; font-weight: 800; }
+    .stat-box .lbl { font-size: 0.72rem; color: var(--muted); margin-top: 2px; }
+    .stat-box.green .val { color: var(--success); }
+    .stat-box.red   .val { color: var(--danger); }
+    .stat-box.blue  .val { color: #60a5fa; }
+
+    .result-actions { display: flex; gap: 10px; }
+    .result-actions .btn { flex: 1; }
+
+    /* ── Error ─────────────────────────────────────────────────── */
+    #error-msg {
+      display: none;
+      background: rgba(239,68,68,0.08);
+      border: 1px solid rgba(239,68,68,0.3);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 0.85rem;
+      color: var(--danger);
+    }
+
+    /* ── Footer ────────────────────────────────────────────────── */
+    footer {
+      margin-top: 28px;
+      color: var(--muted);
+      font-size: 0.75rem;
+      text-align: center;
+    }
+    footer a { color: var(--accent2); text-decoration: none; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>⚡ QuizAI</h1>
+  <p>Génère un quiz sur n'importe quel thème en quelques secondes</p>
+  <div class="badge">Propulsé par Claude (Anthropic)</div>
+</header>
+
+<div class="card">
+
+  <!-- ── SETUP SCREEN ── -->
+  <div id="setup">
+    <div class="field">
+      <label>🔑 Clé API Anthropic</label>
+      <input type="password" id="apiKey" placeholder="sk-ant-api03-..." />
+    </div>
+
+    <div class="api-note">
+      <span>ℹ</span>
+      <span>Votre clé reste dans le navigateur et n'est jamais envoyée à un tiers.
+      Obtenez la vôtre sur <strong>console.anthropic.com</strong>.</span>
+    </div>
+
+    <div class="field">
+      <label>🎯 Thème du quiz</label>
+      <input type="text" id="topic" placeholder="ex: JavaScript, Football, Astronomie…" maxlength="80" />
+    </div>
+
+    <div class="options-grid">
+      <div class="field">
+        <label>📊 Difficulté</label>
+        <select id="difficulty">
+          <option value="facile">😊 Facile</option>
+          <option value="moyen" selected>🧠 Moyen</option>
+          <option value="difficile">🔥 Difficile</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>⏱ Temps par question</label>
+        <select id="timer">
+          <option value="15">15 secondes</option>
+          <option value="20" selected>20 secondes</option>
+          <option value="30">30 secondes</option>
+          <option value="0">Sans limite</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="error-msg"></div>
+
+    <button class="btn btn-primary" id="startBtn" onclick="startQuiz()">
+      ✦ Générer le quiz
+    </button>
+  </div>
+
+  <!-- ── LOADING SCREEN ── -->
+  <div id="loading">
+    <div class="spinner"></div>
+    <div>
+      <div class="loading-label">Génération en cours…</div>
+      <div class="loading-text" id="loadingText">Claude prépare vos questions</div>
+    </div>
+  </div>
+
+  <!-- ── QUIZ SCREEN ── -->
+  <div id="quiz">
+    <div class="quiz-meta">
+      <span class="quiz-topic" id="quizTopic"></span>
+      <div class="timer" id="timerDisplay">
+        <span>⏱</span><span id="timerVal">—</span>
+      </div>
+    </div>
+
+    <div class="progress-bar">
+      <div class="progress-fill" id="progressFill" style="width:0%"></div>
+    </div>
+
+    <div class="question-num" id="questionNum"></div>
+    <div class="question-text" id="questionText"></div>
+
+    <div class="choices" id="choices"></div>
+
+    <div class="explanation" id="explanation"></div>
+  </div>
+
+  <!-- ── RESULTS SCREEN ── -->
+  <div id="results">
+    <div class="score-ring" id="scoreRing">
+      <span id="scoreVal">0</span>
+      <small>/5</small>
+    </div>
+
+    <div>
+      <div class="result-title" id="resultTitle"></div>
+      <div class="result-subtitle" id="resultSub"></div>
+    </div>
+
+    <div class="result-grid">
+      <div class="stat-box green">
+        <div class="val" id="statCorrect">0</div>
+        <div class="lbl">Bonnes réponses</div>
+      </div>
+      <div class="stat-box red">
+        <div class="val" id="statWrong">0</div>
+        <div class="lbl">Mauvaises réponses</div>
+      </div>
+      <div class="stat-box blue">
+        <div class="val" id="statTime">0s</div>
+        <div class="lbl">Temps total</div>
+      </div>
+    </div>
+
+    <div class="result-actions">
+      <button class="btn btn-ghost" onclick="resetToSetup()">← Changer de thème</button>
+      <button class="btn btn-primary" onclick="retryQuiz()">↩ Rejouer</button>
+    </div>
+  </div>
+
+</div>
+
+<footer>
+  Projet open-source · Construit avec l'<a href="https://docs.anthropic.com" target="_blank">API Claude (Anthropic)</a>
+  · <a href="https://github.com" target="_blank">GitHub</a>
+</footer>
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════════
+const state = {
+  questions: [],
+  current: 0,
+  score: 0,
+  wrong: 0,
+  startTime: null,
+  timerInterval: null,
+  questionTimer: null,
+  timeLimit: 20,
+  topic: '',
+  answered: false,
+};
+
+// ═══════════════════════════════════════════════════════════════════
+//  UI HELPERS
+// ═══════════════════════════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+
+function showScreen(name) {
+  ['setup', 'loading', 'quiz', 'results'].forEach(s => {
+    const el = $(s);
+    el.style.display = s === name ? 'flex' : 'none';
+  });
+}
+
+function showError(msg) {
+  const el = $('error-msg');
+  el.textContent = msg;
+  el.style.display = 'block';
+}
+
+function hideError() {
+  $('error-msg').style.display = 'none';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  LOADING MESSAGES
+// ═══════════════════════════════════════════════════════════════════
+const loadingMessages = [
+  'Claude prépare vos questions…',
+  'Sélection des pièges à éviter…',
+  'Calibrage de la difficulté…',
+  'Ajout d\'explications pédagogiques…',
+  'Presque prêt…',
+];
+let loadingIdx = 0;
+let loadingLoop = null;
+
+function startLoadingAnimation() {
+  loadingIdx = 0;
+  $('loadingText').textContent = loadingMessages[0];
+  loadingLoop = setInterval(() => {
+    loadingIdx = (loadingIdx + 1) % loadingMessages.length;
+    $('loadingText').textContent = loadingMessages[loadingIdx];
+  }, 1800);
+}
+
+function stopLoadingAnimation() {
+  clearInterval(loadingLoop);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  API CALL
+// ═══════════════════════════════════════════════════════════════════
+async function generateQuestions(apiKey, topic, difficulty) {
+  const prompt = `Tu es un générateur de quiz. Crée exactement 5 questions de quiz sur le thème "${topic}" avec un niveau de difficulté "${difficulty}".
+
+RÉPONDS UNIQUEMENT AVEC UN JSON VALIDE, sans texte avant ni après, sans balises markdown, sans backticks.
+
+Format exact :
+{
+  "questions": [
+    {
+      "question": "texte de la question",
+      "choices": ["réponse A", "réponse B", "réponse C", "réponse D"],
+      "correct": 0,
+      "explanation": "courte explication de la bonne réponse (1-2 phrases)"
+    }
+  ]
+}
+
+Règles :
+- "correct" est l'index (0-3) de la bonne réponse dans le tableau "choices"
+- Les 4 choix doivent être plausibles mais un seul correct
+- Questions variées, pas de répétition
+- Niveau ${difficulty} respecté strictement`;
+
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1500,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    throw new Error(err.error?.message || `Erreur API (${response.status})`);
+  }
+
+  const data = await response.json();
+  const raw = data.content[0].text.trim();
+
+  // Strip possible markdown fences
+  const cleaned = raw.replace(/^```json\s*/i, '').replace(/```\s*$/i, '').trim();
+  const parsed = JSON.parse(cleaned);
+
+  if (!parsed.questions || parsed.questions.length !== 5) {
+    throw new Error('Réponse inattendue de l\'API. Réessayez.');
+  }
+  return parsed.questions;
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  START QUIZ
+// ═══════════════════════════════════════════════════════════════════
+async function startQuiz() {
+  hideError();
+
+  const apiKey = $('apiKey').value.trim();
+  const topic  = $('topic').value.trim();
+  const difficulty = $('difficulty').value;
+  const timerVal  = parseInt($('timer').value);
+
+  if (!apiKey) { showError('Veuillez entrer votre clé API Anthropic.'); return; }
+  if (!topic)  { showError('Veuillez entrer un thème pour le quiz.'); return; }
+
+  $('startBtn').disabled = true;
+  showScreen('loading');
+  startLoadingAnimation();
+
+  try {
+    const questions = await generateQuestions(apiKey, topic, difficulty);
+    stopLoadingAnimation();
+
+    state.questions = questions;
+    state.current   = 0;
+    state.score     = 0;
+    state.wrong     = 0;
+    state.timeLimit = timerVal;
+    state.topic     = topic;
+    state.startTime = Date.now();
+
+    showScreen('quiz');
+    renderQuestion();
+  } catch (err) {
+    stopLoadingAnimation();
+    showScreen('setup');
+    showError('Erreur : ' + (err.message || 'Impossible de générer le quiz.'));
+  } finally {
+    $('startBtn').disabled = false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  RENDER QUESTION
+// ═══════════════════════════════════════════════════════════════════
+function renderQuestion() {
+  const q = state.questions[state.current];
+  const total = state.questions.length;
+
+  state.answered = false;
+
+  // Meta
+  $('quizTopic').textContent = `${state.topic}`;
+  $('questionNum').textContent = `Question ${state.current + 1} / ${total}`;
+  $('questionText').textContent = q.question;
+  $('progressFill').style.width = `${(state.current / total) * 100}%`;
+
+  // Choices
+  const letters = ['A', 'B', 'C', 'D'];
+  const container = $('choices');
+  container.innerHTML = '';
+  q.choices.forEach((choice, i) => {
+    const btn = document.createElement('button');
+    btn.className = 'choice-btn';
+    btn.innerHTML = `<span class="choice-letter">${letters[i]}</span>${choice}`;
+    btn.onclick = () => answer(i);
+    container.appendChild(btn);
+  });
+
+  // Explanation hidden
+  const expEl = $('explanation');
+  expEl.style.display = 'none';
+  expEl.innerHTML = '';
+
+  // Timer
+  clearInterval(state.questionTimer);
+  if (state.timeLimit > 0) {
+    let remaining = state.timeLimit;
+    const timerEl = $('timerDisplay');
+    const valEl   = $('timerVal');
+    timerEl.style.display = 'flex';
+    valEl.textContent = remaining + 's';
+    timerEl.classList.remove('urgent');
+
+    state.questionTimer = setInterval(() => {
+      remaining--;
+      valEl.textContent = remaining + 's';
+      if (remaining <= 5) timerEl.classList.add('urgent');
+      if (remaining <= 0) {
+        clearInterval(state.questionTimer);
+        timeUp();
+      }
+    }, 1000);
+  } else {
+    $('timerDisplay').style.display = 'none';
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  ANSWER
+// ═══════════════════════════════════════════════════════════════════
+function answer(chosen) {
+  if (state.answered) return;
+  state.answered = true;
+  clearInterval(state.questionTimer);
+
+  const q = state.questions[state.current];
+  const btns = $('choices').querySelectorAll('.choice-btn');
+
+  btns.forEach(b => b.disabled = true);
+  btns[q.correct].classList.add('correct');
+
+  if (chosen === q.correct) {
+    state.score++;
+  } else {
+    state.wrong++;
+    btns[chosen].classList.add('wrong');
+  }
+
+  // Explanation
+  const expEl = $('explanation');
+  expEl.innerHTML = `<strong>💡 Explication :</strong> ${q.explanation}`;
+  expEl.style.display = 'block';
+
+  // Next after delay
+  setTimeout(nextQuestion, 2200);
+}
+
+function timeUp() {
+  if (state.answered) return;
+  state.answered = true;
+  state.wrong++;
+
+  const q = state.questions[state.current];
+  const btns = $('choices').querySelectorAll('.choice-btn');
+  btns.forEach(b => b.disabled = true);
+  btns[q.correct].classList.add('correct');
+
+  const expEl = $('explanation');
+  expEl.innerHTML = `<strong>⏰ Temps écoulé !</strong> La bonne réponse était : <strong>${q.choices[q.correct]}</strong>. ${q.explanation}`;
+  expEl.style.display = 'block';
+
+  setTimeout(nextQuestion, 2200);
+}
+
+function nextQuestion() {
+  state.current++;
+  if (state.current < state.questions.length) {
+    renderQuestion();
+  } else {
+    showResults();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  RESULTS
+// ═══════════════════════════════════════════════════════════════════
+function showResults() {
+  clearInterval(state.questionTimer);
+  $('progressFill').style.width = '100%';
+
+  const elapsed = Math.round((Date.now() - state.startTime) / 1000);
+  const pct = (state.score / state.questions.length) * 100;
+
+  const scoreRing = $('scoreRing');
+  scoreRing.style.borderColor =
+    pct >= 80 ? 'var(--success)' :
+    pct >= 50 ? 'var(--warning)' : 'var(--danger)';
+
+  $('scoreVal').textContent = state.score;
+  $('statCorrect').textContent = state.score;
+  $('statWrong').textContent = state.wrong;
+  $('statTime').textContent = elapsed + 's';
+
+  const msgs = [
+    [80, '🏆 Excellent !', 'Vous maîtrisez ce sujet parfaitement.'],
+    [60, '👍 Bien joué !', 'Encore un peu d\'entraînement et vous serez imbattable.'],
+    [40, '📚 Pas mal !', 'Quelques révisions s\'imposent.'],
+    [0,  '💪 Courage !', 'Le sujet est difficile — réessayez !'],
+  ];
+  const [, title, sub] = msgs.find(([min]) => pct >= min);
+  $('resultTitle').textContent = title;
+  $('resultSub').textContent   = sub;
+
+  showScreen('results');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════════════════════════════
+function retryQuiz() {
+  state.current = 0;
+  state.score   = 0;
+  state.wrong   = 0;
+  state.startTime = Date.now();
+  showScreen('quiz');
+  renderQuestion();
+}
+
+function resetToSetup() {
+  clearInterval(state.questionTimer);
+  showScreen('setup');
+}
+
+// ── Allow Enter key to start ────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if (e.key === 'Enter' && $('setup').style.display === 'flex') startQuiz();
+});
+</script>
+</body>
+</html>
